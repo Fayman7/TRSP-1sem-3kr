@@ -12,6 +12,7 @@ from config import settings
 from database import get_db_connection
 from jwt_auth import create_access_token, get_current_user, require_permission, require_roles
 from models import ResourceCreate, ResourceUpdate, TokenUser, User, UserInDB
+from todos import router as todos_router
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -21,6 +22,7 @@ app = FastAPI(
     openapi_url=None,
 )
 app.state.limiter = limiter
+app.include_router(todos_router)
 
 fake_resources_db: dict[int, dict] = {}
 _next_resource_id = 1

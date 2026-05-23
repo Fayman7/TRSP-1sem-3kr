@@ -1,0 +1,34 @@
+import secrets
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from passlib.context import CryptContext
+
+from models import UserInDB
+
+security = HTTPBasic()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+fake_users_db: dict[str, UserInDB] = {}
+_dummy_hash = pwd_context.hash("dummy_password")
+
+
+def unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Incorrect username or password",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
+
+def auth_user(credentials: HTTPBasicCredentials = Depends(security)) -> UserInDB:
+    user = fake_users_db.get(credentials.username)
+
+    if user is not None:
+        correct_username = secrets.compare_digest(credentials.username, user.username)
+        correct_password = pwd_context.verify(credentials.password, user.hashed_password)
+        if correct_username and correct_password:
+            return user
+
+    pwd_context.verify(credentials.password, _dummy_hash)
+    raise unauthorized()

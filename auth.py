@@ -15,6 +15,13 @@ fake_users_db: dict[str, UserInDB] = {}
 _dummy_hash = pwd_context.hash("dummy_password")
 
 
+def find_user(username: str) -> UserInDB | None:
+    for stored_username, user in fake_users_db.items():
+        if secrets.compare_digest(username, stored_username):
+            return user
+    return None
+
+
 def unauthorized() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -49,14 +56,38 @@ def auth_user(credentials: HTTPBasicCredentials = Depends(security)) -> UserInDB
     raise unauthorized()
 
 
-def authenticate_user(username: str, password: str) -> bool:
-    user = fake_users_db.get(username)
+def register_new_user(username: str, password: str) -> None:
+    if find_user(username) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already exists",
+        )
 
-    if user is not None:
-        correct_username = secrets.compare_digest(username, user.username)
-        correct_password = pwd_context.verify(password, user.hashed_password)
-        if correct_username and correct_password:
-            return True
+    hashed_password = pwd_context.hash(password)
+    fake_users_db[username] = UserInDB(username=username, hashed_password=hashed_password)
 
-    pwd_context.verify(password, _dummy_hash)
-    return False
+
+def authenticate_for_jwt(username: str, password: str) -> str:
+    user = find_user(username)
+
+    if user is None:
+        pwd_context.verify(password, _dummy_hash)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if not secrets.compare_digest(username, user.username):
+        pwd_context.verify(password, _dummy_hash)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if not pwd_context.verify(password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization failed",
+        )
+
+    return user.username

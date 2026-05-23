@@ -1,24 +1,43 @@
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from auth import auth_user, authenticate_user, fake_users_db, pwd_context, verify_docs_credentials
+from auth import (
+    auth_user,
+    authenticate_for_jwt,
+    register_new_user,
+    verify_docs_credentials,
+)
 from config import settings
 from jwt_auth import create_access_token, get_current_user
 from models import User, UserInDB
+
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
 )
+app.state.limiter = limiter
 
 
-@app.post("/register")
-def register(user: User):
-    hashed_password = pwd_context.hash(user.password)
-    user_in_db = UserInDB(username=user.username, hashed_password=hashed_password)
-    fake_users_db[user.username] = user_in_db
-    return {"message": f"User '{user.username}' successfully registered"}
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": "Too many requests"},
+    )
+
+
+@app.post("/register", status_code=status.HTTP_201_CREATED)
+@limiter.limit("1/minute")
+def register(request: Request, user: User):
+    register_new_user(user.username, user.password)
+    return {"message": "New user created"}
 
 
 @app.get("/login")
@@ -27,19 +46,16 @@ def basic_login(user: UserInDB = Depends(auth_user)):
 
 
 @app.post("/login")
-def jwt_login(credentials: User):
-    if not authenticate_user(credentials.username, credentials.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
-    access_token = create_access_token(credentials.username)
-    return {"access_token": access_token}
+@limiter.limit("5/minute")
+def jwt_login(request: Request, credentials: User):
+    username = authenticate_for_jwt(credentials.username, credentials.password)
+    access_token = create_access_token(username)
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/protected_resource")
-def protected_resource(username: str = Depends(get_current_user)):
-    return {"message": f"Access granted for {username}"}
+def protected_resource(_: str = Depends(get_current_user)):
+    return {"message": "Access granted"}
 
 
 async def docs_not_found():

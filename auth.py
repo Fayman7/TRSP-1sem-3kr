@@ -56,7 +56,7 @@ def auth_user(credentials: HTTPBasicCredentials = Depends(security)) -> UserInDB
     raise unauthorized()
 
 
-def register_new_user(username: str, password: str) -> None:
+def register_new_user(username: str, password: str, role: str = "guest") -> None:
     if find_user(username) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -64,10 +64,14 @@ def register_new_user(username: str, password: str) -> None:
         )
 
     hashed_password = pwd_context.hash(password)
-    fake_users_db[username] = UserInDB(username=username, hashed_password=hashed_password)
+    fake_users_db[username] = UserInDB(
+        username=username,
+        hashed_password=hashed_password,
+        role=role,
+    )
 
 
-def authenticate_for_jwt(username: str, password: str) -> str:
+def authenticate_for_jwt(username: str, password: str) -> UserInDB:
     user = find_user(username)
 
     if user is None:
@@ -90,4 +94,4 @@ def authenticate_for_jwt(username: str, password: str) -> str:
             detail="Authorization failed",
         )
 
-    return user.username
+    return user

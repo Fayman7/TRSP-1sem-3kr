@@ -5,15 +5,10 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from auth import (
-    auth_user,
-    authenticate_for_jwt,
-    register_new_user,
-    verify_docs_credentials,
-)
+from auth import auth_user, authenticate_for_jwt, register_new_user, verify_docs_credentials
 from config import settings
-from jwt_auth import create_access_token, get_current_user
-from models import User, UserInDB
+from jwt_auth import create_access_token, get_current_user, require_permission, require_roles
+from models import ResourceCreate, ResourceUpdate, TokenUser, User, UserInDB, UserRegister
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -23,6 +18,9 @@ app = FastAPI(
     openapi_url=None,
 )
 app.state.limiter = limiter
+
+fake_resources_db: dict[int, dict] = {}
+_next_resource_id = 1
 
 
 @app.exception_handler(RateLimitExceeded)
@@ -35,8 +33,8 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 @app.post("/register", status_code=status.HTTP_201_CREATED)
 @limiter.limit("1/minute")
-def register(request: Request, user: User):
-    register_new_user(user.username, user.password)
+def register(request: Request, user: UserRegister):
+    register_new_user(user.username, user.password, user.role)
     return {"message": "New user created"}
 
 
@@ -48,14 +46,60 @@ def basic_login(user: UserInDB = Depends(auth_user)):
 @app.post("/login")
 @limiter.limit("5/minute")
 def jwt_login(request: Request, credentials: User):
-    username = authenticate_for_jwt(credentials.username, credentials.password)
-    access_token = create_access_token(username)
+    user = authenticate_for_jwt(credentials.username, credentials.password)
+    access_token = create_access_token(user.username, user.role)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/protected_resource")
-def protected_resource(_: str = Depends(get_current_user)):
-    return {"message": "Access granted"}
+def protected_resource(
+    current_user: TokenUser = Depends(require_roles("admin", "user")),
+):
+    return {"message": "Access granted", "role": current_user.role}
+
+
+@app.post("/admin/resource", status_code=status.HTTP_201_CREATED)
+def admin_create_resource(
+    resource: ResourceCreate,
+    current_user: TokenUser = Depends(require_permission("create")),
+):
+    global _next_resource_id
+    resource_id = _next_resource_id
+    _next_resource_id += 1
+    fake_resources_db[resource_id] = {"id": resource_id, "name": resource.name}
+    return {"message": "Resource created", "resource": fake_resources_db[resource_id]}
+
+
+@app.get("/resources")
+def read_resources(
+    current_user: TokenUser = Depends(require_permission("read")),
+):
+    return {"resources": list(fake_resources_db.values())}
+
+
+@app.put("/resources/{resource_id}")
+def update_resource(
+    resource_id: int,
+    resource: ResourceUpdate,
+    current_user: TokenUser = Depends(require_permission("update")),
+):
+    if resource_id not in fake_resources_db:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+
+    fake_resources_db[resource_id]["name"] = resource.name
+    return {"message": "Resource updated", "resource": fake_resources_db[resource_id]}
+
+
+@app.delete("/resources/{resource_id}")
+def delete_resource(
+    resource_id: int,
+    current_user: TokenUser = Depends(require_permission("delete")),
+):
+    if resource_id not in fake_resources_db:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+
+    deleted = fake_resources_db.pop(resource_id)
+    return {"message": "Resource deleted", "resource": deleted}
 
 
 async def docs_not_found():

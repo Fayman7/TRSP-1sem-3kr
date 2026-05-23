@@ -16,9 +16,10 @@ copy .env.example .env
 Создайте таблицы в SQLite (один раз):
 
 ```powershell
-python create_users_table.py
-python create_todos_table.py
+python -c "from main import init_db; init_db()"
 ```
+
+Или просто запустите сервер — таблицы создаются автоматически при старте.
 
 Запуск сервера:
 
@@ -108,14 +109,8 @@ curl.exe -u valid_user:valid_password http://127.0.0.1:8000/docs
 ## Структура проекта
 
 ```
-├── main.py              # Точка входа FastAPI
-├── database.py          # Подключение к SQLite
-├── auth.py              # Basic Auth, bcrypt, in-memory users
-├── jwt_auth.py          # JWT и проверка ролей
-├── rbac.py              # Роли и разрешения
-├── todos.py             # CRUD Todo
-├── models.py            # Pydantic-модели
-├── config.py            # Настройки из .env
-├── create_users_table.py
-└── create_todos_table.py
+├── main.py              # Весь код приложения
+├── requirements.txt
+├── .env.example
+└── README.md
 ```

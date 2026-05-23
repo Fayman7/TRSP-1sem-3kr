@@ -47,3 +47,16 @@ def auth_user(credentials: HTTPBasicCredentials = Depends(security)) -> UserInDB
 
     pwd_context.verify(credentials.password, _dummy_hash)
     raise unauthorized()
+
+
+def authenticate_user(username: str, password: str) -> bool:
+    user = fake_users_db.get(username)
+
+    if user is not None:
+        correct_username = secrets.compare_digest(username, user.username)
+        correct_password = pwd_context.verify(password, user.hashed_password)
+        if correct_username and correct_password:
+            return True
+
+    pwd_context.verify(password, _dummy_hash)
+    return False

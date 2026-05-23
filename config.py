@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     mode: Literal["DEV", "PROD"] = "DEV"
     docs_user: str = ""
     docs_password: str = ""
+    jwt_secret: str = "your-secret-key"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 30
 
     @field_validator("mode", mode="before")
     @classmethod

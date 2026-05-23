@@ -1,8 +1,9 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.openapi.docs import get_swagger_ui_html
 
-from auth import auth_user, fake_users_db, pwd_context, verify_docs_credentials
+from auth import auth_user, authenticate_user, fake_users_db, pwd_context, verify_docs_credentials
 from config import settings
+from jwt_auth import create_access_token, get_current_user
 from models import User, UserInDB
 
 app = FastAPI(
@@ -21,8 +22,24 @@ def register(user: User):
 
 
 @app.get("/login")
-def login(user: UserInDB = Depends(auth_user)):
+def basic_login(user: UserInDB = Depends(auth_user)):
     return {"message": f"Welcome, {user.username}!"}
+
+
+@app.post("/login")
+def jwt_login(credentials: User):
+    if not authenticate_user(credentials.username, credentials.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    access_token = create_access_token(credentials.username)
+    return {"access_token": access_token}
+
+
+@app.get("/protected_resource")
+def protected_resource(username: str = Depends(get_current_user)):
+    return {"message": f"Access granted for {username}"}
 
 
 async def docs_not_found():

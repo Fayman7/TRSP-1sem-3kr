@@ -4,9 +4,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from passlib.context import CryptContext
 
+from config import settings
 from models import UserInDB
 
 security = HTTPBasic()
+docs_security = HTTPBasic()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 fake_users_db: dict[str, UserInDB] = {}
@@ -19,6 +21,19 @@ def unauthorized() -> HTTPException:
         detail="Incorrect username or password",
         headers={"WWW-Authenticate": "Basic"},
     )
+
+
+def verify_docs_credentials(
+    credentials: HTTPBasicCredentials = Depends(docs_security),
+) -> str:
+    correct_user = secrets.compare_digest(credentials.username, settings.docs_user)
+    correct_password = secrets.compare_digest(credentials.password, settings.docs_password)
+    if correct_user and correct_password:
+        return credentials.username
+
+    secrets.compare_digest(credentials.username, "dummy_user")
+    secrets.compare_digest(credentials.password, "dummy_password")
+    raise unauthorized()
 
 
 def auth_user(credentials: HTTPBasicCredentials = Depends(security)) -> UserInDB:

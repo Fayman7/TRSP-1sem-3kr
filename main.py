@@ -1,3 +1,5 @@
+import sqlite3
+
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse
@@ -5,10 +7,11 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from auth import auth_user, authenticate_for_jwt, register_new_user, verify_docs_credentials
+from auth import auth_user, authenticate_for_jwt, verify_docs_credentials
 from config import settings
+from database import get_db_connection
 from jwt_auth import create_access_token, get_current_user, require_permission, require_roles
-from models import ResourceCreate, ResourceUpdate, TokenUser, User, UserInDB, UserRegister
+from models import ResourceCreate, ResourceUpdate, TokenUser, User, UserInDB
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -31,11 +34,23 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
-@app.post("/register", status_code=status.HTTP_201_CREATED)
-@limiter.limit("1/minute")
-def register(request: Request, user: UserRegister):
-    register_new_user(user.username, user.password, user.role)
-    return {"message": "New user created"}
+@app.post("/register")
+def register(user: User):
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO users (username, password) VALUES (?, ?)",
+            (user.username, user.password),
+        )
+        conn.commit()
+        return {"message": "User registered successfully!"}
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already exists",
+        )
+    finally:
+        conn.close()
 
 
 @app.get("/login")

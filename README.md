@@ -107,10 +107,3 @@ curl.exe -u valid_user:valid_password http://127.0.0.1:8000/docs
 | GET | `/docs` | Swagger UI (DEV, Basic Auth) |
 
 ## Структура проекта
-
-```
-├── main.py              # Весь код приложения
-├── requirements.txt
-├── .env.example
-└── README.md
-```

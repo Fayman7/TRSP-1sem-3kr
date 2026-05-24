@@ -105,5 +105,3 @@ curl.exe -u valid_user:valid_password http://127.0.0.1:8000/docs
 | GET | `/protected_resource` | JWT, роли admin/user |
 | POST/GET/PUT/DELETE | `/todos`, `/todos/{id}` | CRUD Todo (SQLite) |
 | GET | `/docs` | Swagger UI (DEV, Basic Auth) |
-
-## Структура проекта
